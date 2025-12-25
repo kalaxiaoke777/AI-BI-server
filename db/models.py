@@ -31,10 +31,17 @@ class FundBasic(Base):
     fund_type = Column(String(50), comment="fund_type")
     pinyin = Column(String(200), comment="pinyin")
     manager = Column(String(100), comment="manager")
-    company = Column(String(100), comment="company")
+    company_id = Column(Integer, ForeignKey("fund_company.id"), nullable=True, index=True, comment="company_id")
+    company_name = Column(String(100), comment="company_name")  # For backward compatibility
     establish_date = Column(DateTime, comment="establish_date")
     latest_nav = Column(Float, comment="latest_nav")
     latest_nav_date = Column(DateTime, comment="latest_nav_date")
+    is_purchaseable = Column(Boolean, default=True, comment="is_purchaseable")
+    purchase_start_date = Column(DateTime, comment="purchase_start_date")
+    purchase_end_date = Column(DateTime, comment="purchase_end_date")
+    purchase_min_amount = Column(Float, comment="purchase_min_amount")
+    redemption_min_amount = Column(Float, comment="redemption_min_amount")
+    risk_level = Column(String(20), comment="risk_level")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
     
@@ -42,6 +49,8 @@ class FundBasic(Base):
     daily_data = relationship("FundDaily", back_populates="fund")
     holdings = relationship("FundHolding", back_populates="fund")
     raw_data = relationship("RawFundData", back_populates="fund_basic")
+    company = relationship("FundCompany", back_populates="funds")
+    growths = relationship("FundGrowth", back_populates="fund")
 
 # Fund daily data table
 class FundDaily(Base):
@@ -58,6 +67,26 @@ class FundDaily(Base):
     # Relationships
     fund = relationship("FundBasic", back_populates="daily_data")
 
+# Fund company table
+class FundCompany(Base):
+    __tablename__ = "fund_company"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    company_code = Column(String(20), unique=True, index=True, nullable=False, comment="company_code")
+    company_name = Column(String(100), index=True, nullable=False, comment="company_name")
+    short_name = Column(String(50), comment="short_name")
+    establish_date = Column(DateTime, comment="establish_date")
+    registered_capital = Column(Float, comment="registered_capital")
+    address = Column(String(200), comment="address")
+    contact_phone = Column(String(50), comment="contact_phone")
+    website = Column(String(200), comment="website")
+    description = Column(Text, comment="description")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    funds = relationship("FundBasic", back_populates="company")
+
 # Fund holdings table
 class FundHolding(Base):
     __tablename__ = "fund_holding"
@@ -72,6 +101,24 @@ class FundHolding(Base):
     
     # Relationships
     fund = relationship("FundBasic", back_populates="holdings")
+
+# Fund growth table
+class FundGrowth(Base):
+    __tablename__ = "fund_growth"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    fund_id = Column(Integer, ForeignKey("fund_basic.id"), nullable=False, index=True, comment="fund_id")
+    daily_growth = Column(Float, comment="近1日涨幅")
+    weekly_growth = Column(Float, comment="近1周涨幅")
+    monthly_growth = Column(Float, comment="近1月涨幅")
+    quarterly_growth = Column(Float, comment="近3月涨幅")
+    yearly_growth = Column(Float, comment="近1年涨幅")
+    update_date = Column(DateTime, nullable=False, index=True, comment="update_date")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    fund = relationship("FundBasic", back_populates="growths")
 
 # Raw fund data table (for storing crawled raw data)
 class RawFundData(Base):

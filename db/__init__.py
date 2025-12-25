@@ -34,6 +34,13 @@ def init_db():
     # 导入所有模型，确保它们被注册到 Base.metadata 中
     from db import models
     
-    # 创建所有表
+    # 检查并更新表结构
+    # 在开发环境中，我们可以使用drop_all和create_all来重新创建表
+    # 在生产环境中，应该使用Alembic进行数据库迁移
+    logger.info("开始更新数据库表结构...")
+    
+    # 先删除所有表，然后重新创建
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    
     logger.info("数据库初始化完成")

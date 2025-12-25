@@ -19,8 +19,239 @@ class ScrapeService:
         }
         self.logger = logger
         
+    def update_fund_growth(self, source: DataSource, fund_code_list: List[str] = None) -> Dict[str, Any]:
+        """更新基金历史涨幅数据
+        
+        Args:
+            source: 数据来源
+            fund_code_list: 基金代码列表，为空则更新所有基金
+            
+        Returns:
+            Dict[str, Any]: 更新结果，包括成功数量、失败数量和总数量
+        """
+        self.logger.info(f"开始更新基金历史涨幅数据，数据源: {source}")
+        
+        scraper = self.scrapers.get(source)
+        if not scraper:
+            self.logger.error(f"未找到对应的爬虫，数据源: {source}")
+            return {"status": "error", "message": "未找到对应的爬虫"}
+        
+        if not hasattr(scraper, "get_fund_growth_data"):
+            self.logger.error(f"爬虫 {source} 不支持获取基金历史涨幅数据")
+            return {"status": "error", "message": "爬虫不支持获取基金历史涨幅数据"}
+        
+        # 确定要更新的基金列表
+        if not fund_code_list:
+            self.logger.info("更新所有基金的历史涨幅数据")
+            fund_code_list = [fund.fund_code for fund in self.db.query(models.FundBasic).all()]
+        
+        if not fund_code_list:
+            self.logger.error("没有找到要更新的基金")
+            return {"status": "error", "message": "没有找到要更新的基金"}
+        
+        # 处理基金历史涨幅数据
+        success_count = 0
+        failed_count = 0
+        total_count = len(fund_code_list)
+        
+        from datetime import datetime
+        current_date = datetime.now()
+        
+        for fund_code in fund_code_list:
+            try:
+                # 获取基金
+                fund = self.db.query(models.FundBasic).filter(
+                    models.FundBasic.fund_code == fund_code
+                ).first()
+                
+                if not fund:
+                    self.logger.error(f"基金不存在，基金代码: {fund_code}")
+                    failed_count += 1
+                    continue
+                
+                # 获取涨幅数据
+                growth_data = scraper.get_fund_growth_data(fund_code)
+                
+                if not growth_data:
+                    self.logger.error(f"获取涨幅数据失败，基金代码: {fund_code}")
+                    failed_count += 1
+                    continue
+                
+                # 查找现有涨幅数据
+                existing_growth = self.db.query(models.FundGrowth).filter(
+                    models.FundGrowth.fund_id == fund.id,
+                    models.FundGrowth.update_date == current_date.date()
+                ).first()
+                
+                # 创建或更新涨幅数据
+                if existing_growth:
+                    # 更新现有涨幅数据
+                    for growth_item in growth_data:
+                        if growth_item["growth_type"] == "近1日":
+                            existing_growth.daily_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1周":
+                            existing_growth.weekly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1月":
+                            existing_growth.monthly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近3月":
+                            existing_growth.quarterly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1年":
+                            existing_growth.yearly_growth = growth_item["growth_value"]
+                    existing_growth.updated_at = current_date
+                else:
+                    # 创建新涨幅数据
+                    new_growth = models.FundGrowth(
+                        fund_id=fund.id,
+                        update_date=current_date
+                    )
+                    
+                    # 填充涨幅数据
+                    for growth_item in growth_data:
+                        if growth_item["growth_type"] == "近1日":
+                            new_growth.daily_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1周":
+                            new_growth.weekly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1月":
+                            new_growth.monthly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近3月":
+                            new_growth.quarterly_growth = growth_item["growth_value"]
+                        elif growth_item["growth_type"] == "近1年":
+                            new_growth.yearly_growth = growth_item["growth_value"]
+                    
+                    self.db.add(new_growth)
+                
+                self.db.commit()
+                success_count += 1
+                self.logger.info(f"更新基金历史涨幅数据成功，基金代码: {fund_code}")
+                
+            except Exception as e:
+                self.logger.error(f"更新基金历史涨幅数据失败，基金代码: {fund_code}，错误: {str(e)}")
+                self.db.rollback()
+                failed_count += 1
+        
+        self.logger.info(f"基金历史涨幅数据更新完成，数据源: {source}，总数量: {total_count}，成功: {success_count}，失败: {failed_count}")
+        
+        return {
+            "status": "success",
+            "total_count": total_count,
+            "success_count": success_count,
+            "failed_count": failed_count
+        }
+    
+    def update_fund_rank(self, source: DataSource, max_pages: int = None) -> Dict[str, Any]:
+        """更新基金排行数据
+        
+        Args:
+            source: 数据来源
+            max_pages: 最大页码，为None时获取所有数据，默认为None
+            
+        Returns:
+            Dict[str, Any]: 更新结果，包括成功数量、失败数量和总数量
+        """
+        self.logger.info(f"开始更新基金排行数据，数据源: {source}, max_pages: {max_pages}")
+        
+        scraper = self.scrapers.get(source)
+        if not scraper:
+            self.logger.error(f"未找到对应的爬虫，数据源: {source}")
+            return {"status": "error", "message": "未找到对应的爬虫"}
+        
+        if not hasattr(scraper, "get_all_fund_rank_data"):
+            self.logger.error(f"爬虫 {source} 不支持获取基金排行数据")
+            return {"status": "error", "message": "爬虫不支持获取基金排行数据"}
+        
+        # 获取基金排行数据
+        fund_rank_data = scraper.get_all_fund_rank_data(max_pages)
+        
+        if not fund_rank_data:
+            self.logger.error(f"获取基金排行数据失败，数据源: {source}")
+            return {"status": "error", "message": "获取基金排行数据失败"}
+        
+        # 处理基金排行数据
+        success_count = 0
+        failed_count = 0
+        total_count = len(fund_rank_data)
+        
+        for fund_data in fund_rank_data:
+            try:
+                # 查找基金
+                fund = self.db.query(models.FundBasic).filter(
+                    models.FundBasic.fund_code == fund_data["fund_code"]
+                ).first()
+                
+                if not fund:
+                    # 基金不存在，创建新记录
+                    self.logger.info(f"基金不存在，创建新基金，基金代码: {fund_data['fund_code']}")
+                    new_fund = models.FundBasic(
+                        fund_code=fund_data["fund_code"],
+                        short_name=fund_data.get("short_name", ""),
+                        fund_name=fund_data["fund_name"],
+                        fund_type=fund_data.get("fund_type", "未知"),
+                        latest_nav=fund_data["nav"],
+                        is_purchaseable=True,  # 默认设置为可购买
+                        risk_level="未知"  # 默认风险等级
+                    )
+                    self.db.add(new_fund)
+                    self.db.commit()
+                    fund = new_fund
+                    success_count += 1
+                else:
+                    # 更新现有基金基本信息
+                    fund.short_name = fund_data.get("short_name", fund.short_name)
+                    fund.fund_type = fund_data.get("fund_type", fund.fund_type)
+                    if fund_data["nav"] is not None:
+                        fund.latest_nav = fund_data["nav"]
+                    self.db.commit()
+                    success_count += 1
+                
+                # 记录涨幅数据
+                from datetime import datetime
+                current_date = datetime.now()
+                
+                # 查找现有涨幅数据
+                existing_growth = self.db.query(models.FundGrowth).filter(
+                    models.FundGrowth.fund_id == fund.id,
+                    models.FundGrowth.update_date == current_date.date()
+                ).first()
+                
+                if existing_growth:
+                    # 更新现有涨幅数据
+                    existing_growth.daily_growth = fund_data.get("daily_growth")
+                    existing_growth.weekly_growth = fund_data.get("weekly_growth")
+                    existing_growth.monthly_growth = fund_data.get("monthly_growth")
+                    existing_growth.quarterly_growth = fund_data.get("quarterly_growth")
+                    existing_growth.yearly_growth = fund_data.get("yearly_growth")
+                    existing_growth.updated_at = current_date
+                else:
+                    # 创建新涨幅数据
+                    new_growth = models.FundGrowth(
+                        fund_id=fund.id,
+                        daily_growth=fund_data.get("daily_growth"),
+                        weekly_growth=fund_data.get("weekly_growth"),
+                        monthly_growth=fund_data.get("monthly_growth"),
+                        quarterly_growth=fund_data.get("quarterly_growth"),
+                        yearly_growth=fund_data.get("yearly_growth"),
+                        update_date=current_date
+                    )
+                    self.db.add(new_growth)
+                
+                self.db.commit()
+                
+            except Exception as e:
+                self.logger.error(f"处理基金排行数据失败，基金代码: {fund_data['fund_code']}，错误: {str(e)}")
+                self.db.rollback()
+                failed_count += 1
+        
+        self.logger.info(f"基金排行数据更新完成，数据源: {source}，总数量: {total_count}，成功: {success_count}，失败: {failed_count}")
+        
+        return {
+            "status": "success",
+            "total_count": total_count,
+            "success_count": success_count,
+            "failed_count": failed_count
+        }
+    
     def import_fund_list(self, source: DataSource) -> Dict[str, Any]:
-        """从指定数据源导入基金列表
+        """从指定数据源导入基金列表（仅初始化使用，不覆盖已有数据）
         
         Args:
             source: 数据来源
@@ -57,14 +288,14 @@ class ScrapeService:
                     models.FundBasic.fund_code == fund_data["fund_code"]
                 ).first()
                 
+                # 处理基金公司信息（暂时使用公司名称作为关联，后续可扩展公司代码）
+                # 注意：当前东方财富基金列表API返回的数据中没有公司代码，只有基金基本信息
+                company_name = fund_data.get("company", "")
+                
                 if existing_fund:
-                    # 更新现有基金
-                    existing_fund.short_name = fund_data["short_name"]
-                    existing_fund.fund_name = fund_data["fund_name"]
-                    existing_fund.fund_type = fund_data["fund_type"]
-                    existing_fund.pinyin = fund_data["pinyin"]
-                    self.db.commit()
-                    updated_count += 1
+                    # 基金已存在，不更新，直接跳过
+                    self.logger.info(f"基金已存在，跳过，基金代码: {fund_data['fund_code']}")
+                    continue
                 else:
                     # 创建新基金
                     new_fund = models.FundBasic(
@@ -72,7 +303,10 @@ class ScrapeService:
                         short_name=fund_data["short_name"],
                         fund_name=fund_data["fund_name"],
                         fund_type=fund_data["fund_type"],
-                        pinyin=fund_data["pinyin"]
+                        pinyin=fund_data["pinyin"],
+                        company_name=company_name,
+                        is_purchaseable=True,  # 默认设置为可购买
+                        risk_level="未知"  # 默认风险等级
                     )
                     self.db.add(new_fund)
                     self.db.commit()
@@ -83,6 +317,74 @@ class ScrapeService:
                 self.db.rollback()
         
         self.logger.info(f"基金列表导入完成，数据源: {source}，总数量: {total_count}，新增: {added_count}，更新: {updated_count}")
+        
+        return {
+            "status": "success",
+            "total_count": total_count,
+            "added_count": added_count,
+            "updated_count": updated_count
+        }
+    
+    def import_fund_company_list(self, source: DataSource) -> Dict[str, Any]:
+        """从指定数据源导入基金公司列表（仅初始化使用，不覆盖已有数据）
+        
+        Args:
+            source: 数据来源
+            
+        Returns:
+            Dict[str, Any]: 导入结果，包括新增数量、更新数量和总数量
+        """
+        self.logger.info(f"开始导入基金公司列表，数据源: {source}")
+        
+        scraper = self.scrapers.get(source)
+        if not scraper:
+            self.logger.error(f"未找到对应的爬虫，数据源: {source}")
+            return {"status": "error", "message": "未找到对应的爬虫"}
+        
+        if not hasattr(scraper, "get_fund_company_list"):
+            self.logger.error(f"爬虫 {source} 不支持获取基金公司列表")
+            return {"status": "error", "message": "爬虫不支持获取基金公司列表"}
+        
+        # 获取基金公司数据
+        company_list = scraper.get_fund_company_list()
+        if not company_list:
+            self.logger.error(f"获取基金公司数据失败，数据源: {source}")
+            return {"status": "error", "message": "获取基金公司数据失败"}
+        
+        # 处理基金公司数据
+        added_count = 0
+        updated_count = 0
+        total_count = len(company_list)
+        
+        for company_data in company_list:
+            try:
+                # 查找现有公司
+                existing_company = self.db.query(models.FundCompany).filter(
+                    models.FundCompany.company_code == company_data["company_code"]
+                ).first()
+                
+                if existing_company:
+                    # 公司已存在，不更新，直接跳过
+                    self.logger.info(f"公司已存在，跳过，公司代码: {company_data['company_code']}")
+                    continue
+                else:
+                    # 创建新公司
+                    new_company = models.FundCompany(
+                        company_code=company_data["company_code"],
+                        company_name=company_data["company_name"],
+                        short_name=company_data.get("short_name", company_data["company_name"]),  # 使用数据中的简称
+                        establish_date=company_data.get("established_date"),  # 成立日期
+                        # 其他字段暂时为空，后续可扩展
+                    )
+                    self.db.add(new_company)
+                    self.db.commit()
+                    added_count += 1
+                    
+            except Exception as e:
+                self.logger.error(f"处理基金公司数据失败，公司代码: {company_data['company_code']}，错误: {str(e)}")
+                self.db.rollback()
+        
+        self.logger.info(f"基金公司列表导入完成，数据源: {source}，总数量: {total_count}，新增: {added_count}，更新: {updated_count}")
         
         return {
             "status": "success",
