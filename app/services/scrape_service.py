@@ -171,7 +171,10 @@ class ScrapeService:
         failed_count = 0
         total_count = len(fund_rank_data)
         
-        for fund_data in fund_rank_data:
+        from datetime import datetime
+        current_date = datetime.now()
+        
+        for rank, fund_data in enumerate(fund_rank_data, 1):
             try:
                 # 查找基金
                 fund = self.db.query(models.FundBasic).filter(
@@ -185,28 +188,92 @@ class ScrapeService:
                         fund_code=fund_data["fund_code"],
                         short_name=fund_data.get("short_name", ""),
                         fund_name=fund_data["fund_name"],
-                        fund_type=fund_data.get("fund_type", "未知"),
+                        fund_type=fund_data.get("fund_type"),
                         latest_nav=fund_data["nav"],
                         is_purchaseable=True,  # 默认设置为可购买
-                        risk_level="未知"  # 默认风险等级
+                        risk_level=fund_data.get("risk_level"),
+                        purchase_fee=fund_data.get("purchase_fee"),
+                        redemption_fee=fund_data.get("redemption_fee"),
+                        purchase_fee_rate=fund_data.get("purchase_fee_rate")
                     )
+                    # 处理成立日期
+                    if fund_data.get("launch_date"):
+                        try:
+                            new_fund.launch_date = datetime.strptime(fund_data["launch_date"], "%Y-%m-%d").date()
+                        except ValueError:
+                            pass
                     self.db.add(new_fund)
                     self.db.commit()
                     fund = new_fund
-                    success_count += 1
                 else:
                     # 更新现有基金基本信息
                     fund.short_name = fund_data.get("short_name", fund.short_name)
                     fund.fund_type = fund_data.get("fund_type", fund.fund_type)
                     if fund_data["nav"] is not None:
                         fund.latest_nav = fund_data["nav"]
-                    self.db.commit()
-                    success_count += 1
+                    # 更新新增字段
+                    if fund_data.get("risk_level") is not None:
+                        fund.risk_level = fund_data.get("risk_level")
+                    if fund_data.get("purchase_fee") is not None:
+                        fund.purchase_fee = fund_data.get("purchase_fee")
+                    if fund_data.get("redemption_fee") is not None:
+                        fund.redemption_fee = fund_data.get("redemption_fee")
+                    if fund_data.get("purchase_fee_rate") is not None:
+                        fund.purchase_fee_rate = fund_data.get("purchase_fee_rate")
+                    # 更新成立日期
+                    if fund_data.get("launch_date"):
+                        try:
+                            fund.launch_date = datetime.strptime(fund_data["launch_date"], "%Y-%m-%d").date()
+                        except ValueError:
+                            pass
                 
-                # 记录涨幅数据
-                from datetime import datetime
-                current_date = datetime.now()
+                # 记录排行数据 - 增量更新，不删除原有数据
+                # 查找现有排行数据
+                existing_rank = self.db.query(models.FundRank).filter(
+                    models.FundRank.fund_id == fund.id,
+                    models.FundRank.rank_date == current_date.date()
+                ).first()
                 
+                if existing_rank:
+                    # 更新现有排行数据
+                    existing_rank.rank = rank
+                    existing_rank.rank_type = "daily_rank"  # 默认日排行，可根据实际情况调整
+                    existing_rank.nav = fund_data["nav"]
+                    existing_rank.accum_nav = fund_data.get("accum_nav")
+                    existing_rank.daily_growth = fund_data.get("daily_growth")
+                    existing_rank.weekly_growth = fund_data.get("weekly_growth")
+                    existing_rank.monthly_growth = fund_data.get("monthly_growth")
+                    existing_rank.quarterly_growth = fund_data.get("quarterly_growth")
+                    existing_rank.yearly_growth = fund_data.get("yearly_growth")
+                    existing_rank.two_year_growth = fund_data.get("two_year_growth")
+                    existing_rank.three_year_growth = fund_data.get("three_year_growth")
+                    existing_rank.five_year_growth = fund_data.get("five_year_growth")
+                    existing_rank.ytd_growth = fund_data.get("ytd_growth")
+                    existing_rank.since_launch_growth = fund_data.get("since_launch_growth")
+                    existing_rank.updated_at = current_date
+                else:
+                    # 创建新排行数据
+                    new_rank = models.FundRank(
+                        fund_id=fund.id,
+                        rank_date=current_date,
+                        rank=rank,
+                        rank_type="daily_rank",  # 默认日排行，可根据实际情况调整
+                        nav=fund_data["nav"],
+                        accum_nav=fund_data.get("accum_nav"),
+                        daily_growth=fund_data.get("daily_growth"),
+                        weekly_growth=fund_data.get("weekly_growth"),
+                        monthly_growth=fund_data.get("monthly_growth"),
+                        quarterly_growth=fund_data.get("quarterly_growth"),
+                        yearly_growth=fund_data.get("yearly_growth"),
+                        two_year_growth=fund_data.get("two_year_growth"),
+                        three_year_growth=fund_data.get("three_year_growth"),
+                        five_year_growth=fund_data.get("five_year_growth"),
+                        ytd_growth=fund_data.get("ytd_growth"),
+                        since_launch_growth=fund_data.get("since_launch_growth")
+                    )
+                    self.db.add(new_rank)
+                
+                # 更新涨幅数据
                 # 查找现有涨幅数据
                 existing_growth = self.db.query(models.FundGrowth).filter(
                     models.FundGrowth.fund_id == fund.id,
@@ -235,6 +302,8 @@ class ScrapeService:
                     self.db.add(new_growth)
                 
                 self.db.commit()
+                success_count += 1
+                self.logger.info(f"更新基金排行数据成功，基金代码: {fund_data['fund_code']}")
                 
             except Exception as e:
                 self.logger.error(f"处理基金排行数据失败，基金代码: {fund_data['fund_code']}，错误: {str(e)}")

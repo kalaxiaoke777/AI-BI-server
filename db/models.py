@@ -28,12 +28,12 @@ class FundBasic(Base):
     fund_code = Column(String(20), unique=True, index=True, nullable=False, comment="fund_code")
     short_name = Column(String(50), comment="short_name")
     fund_name = Column(String(100), index=True, nullable=False, comment="fund_name")
-    fund_type = Column(String(50), comment="fund_type")
+    fund_type = Column(Integer, comment="fund_type")
     pinyin = Column(String(200), comment="pinyin")
     manager = Column(String(100), comment="manager")
     company_id = Column(Integer, ForeignKey("fund_company.id"), nullable=True, index=True, comment="company_id")
     company_name = Column(String(100), comment="company_name")  # For backward compatibility
-    establish_date = Column(DateTime, comment="establish_date")
+    launch_date = Column(DateTime, comment="成立日期")
     latest_nav = Column(Float, comment="latest_nav")
     latest_nav_date = Column(DateTime, comment="latest_nav_date")
     is_purchaseable = Column(Boolean, default=True, comment="is_purchaseable")
@@ -41,7 +41,10 @@ class FundBasic(Base):
     purchase_end_date = Column(DateTime, comment="purchase_end_date")
     purchase_min_amount = Column(Float, comment="purchase_min_amount")
     redemption_min_amount = Column(Float, comment="redemption_min_amount")
-    risk_level = Column(String(20), comment="risk_level")
+    risk_level = Column(Float, comment="risk_level")
+    purchase_fee = Column(String(10), default="0", comment="申购费率%")
+    redemption_fee = Column(String(10), default="0", comment="赎回费率%")
+    purchase_fee_rate = Column(String(10), default="0", comment="优惠后申购费率%")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
     
@@ -51,6 +54,7 @@ class FundBasic(Base):
     raw_data = relationship("RawFundData", back_populates="fund_basic")
     company = relationship("FundCompany", back_populates="funds")
     growths = relationship("FundGrowth", back_populates="fund")
+    ranks = relationship("FundRank", back_populates="fund")
 
 # Fund daily data table
 class FundDaily(Base):
@@ -119,6 +123,33 @@ class FundGrowth(Base):
     
     # Relationships
     fund = relationship("FundBasic", back_populates="growths")
+
+# Fund rank table
+class FundRank(Base):
+    __tablename__ = "fund_rank"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    fund_id = Column(Integer, ForeignKey("fund_basic.id"), nullable=False, index=True, comment="fund_id")
+    rank_date = Column(DateTime, nullable=False, index=True, comment="rank_date")
+    rank = Column(Integer, comment="rank")
+    rank_type = Column(String(50), index=True, comment="rank_type")
+    nav = Column(Float, comment="单位净值")
+    accum_nav = Column(Float, comment="累计净值")
+    daily_growth = Column(Float, comment="近1日涨幅")
+    weekly_growth = Column(Float, comment="近1周涨幅")
+    monthly_growth = Column(Float, comment="近1月涨幅")
+    quarterly_growth = Column(Float, comment="近3月涨幅")
+    yearly_growth = Column(Float, comment="近1年涨幅")
+    two_year_growth = Column(Float, comment="近2年涨幅")
+    three_year_growth = Column(Float, comment="近3年涨幅")
+    five_year_growth = Column(Float, comment="近5年涨幅")
+    ytd_growth = Column(Float, comment="今年以来涨幅")
+    since_launch_growth = Column(Float, comment="成立以来增长率")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    fund = relationship("FundBasic", back_populates="ranks")
 
 # Raw fund data table (for storing crawled raw data)
 class RawFundData(Base):

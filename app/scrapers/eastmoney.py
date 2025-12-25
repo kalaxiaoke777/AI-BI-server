@@ -89,7 +89,7 @@ class EastMoneyScraper(BaseScraper):
 
             # 提取基金排行数据
             # 格式示例：var rankData = {datas:["000001,华夏成长混合,HXCZHH,2025-12-24,1.076,3.6...", ...]} 或 var rankData ={ErrCode:-999,Data:"无访问权限"}
-
+            import re
             # 匹配rankData变量
             rank_data_match = re.search(
                 r"var rankData = (\{.*?\});", content, re.DOTALL
@@ -128,7 +128,7 @@ class EastMoneyScraper(BaseScraper):
                     for fund_str in fund_strings:
                         # 分割逗号分隔的字段
                         fund_fields = fund_str.split(",")
-                        if len(fund_fields) >= 10:
+                        if len(fund_fields) >= 21:
                             # 提取需要的字段
                             result.append(
                                 {
@@ -171,6 +171,67 @@ class EastMoneyScraper(BaseScraper):
                                         if len(fund_fields) > 10
                                         and fund_fields[10] != ""
                                         else None
+                                    ),
+                                    "two_year_growth": (
+                                        float(fund_fields[11].rstrip("%"))
+                                        if len(fund_fields) > 11
+                                        and fund_fields[11] != ""
+                                        else None
+                                    ),
+                                    "three_year_growth": (
+                                        float(fund_fields[12].rstrip("%"))
+                                        if len(fund_fields) > 12
+                                        and fund_fields[12] != ""
+                                        else None
+                                    ),
+                                    "five_year_growth": (
+                                        float(fund_fields[13].rstrip("%"))
+                                        if len(fund_fields) > 13
+                                        and fund_fields[13] != ""
+                                        else None
+                                    ),
+                                    "ytd_growth": (
+                                        float(fund_fields[14].rstrip("%"))
+                                        if len(fund_fields) > 14
+                                        and fund_fields[14] != ""
+                                        else None
+                                    ),
+                                    "since_launch_growth": (
+                                        float(fund_fields[15].rstrip("%"))
+                                        if len(fund_fields) > 15
+                                        and fund_fields[15] != ""
+                                        else None
+                                    ),
+                                    "launch_date": fund_fields[16] if len(fund_fields) > 16 else None,
+                                    "fund_type": (
+                                        int(fund_fields[17])
+                                        if len(fund_fields) > 17
+                                        and fund_fields[17] != ""
+                                        else None
+                                    ),
+                                    "risk_level": (
+                                        float(fund_fields[18])
+                                        if len(fund_fields) > 18
+                                        and fund_fields[18] != ""
+                                        else None
+                                    ),
+                                    "purchase_fee": (
+                                        fund_fields[19].strip('%')
+                                        if len(fund_fields) > 19
+                                        and fund_fields[19] != ""
+                                        else "0"
+                                    ),
+                                    "redemption_fee": (
+                                        fund_fields[20].strip('%')
+                                        if len(fund_fields) > 20
+                                        and fund_fields[20] != ""
+                                        else "0"
+                                    ),
+                                    "purchase_fee_rate": (
+                                        fund_fields[22].strip('%')
+                                        if len(fund_fields) > 22
+                                        and fund_fields[22] != ""
+                                        else "0"
                                     ),
                                 }
                             )
@@ -298,7 +359,6 @@ class EastMoneyScraper(BaseScraper):
         self.logger.info("开始获取基金公司列表")
 
         try:
-            # 使用用户提供的新接口
             company_url = "https://fund.eastmoney.com/Data/FundRankScale.aspx"
 
             headers = {
@@ -306,57 +366,56 @@ class EastMoneyScraper(BaseScraper):
                 "Referer": self.base_url,
             }
 
-            # 等待请求间隔
             self._wait_for_request()
-
             response = requests.get(company_url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            # 解析响应数据
             content = response.text
             self.logger.info(f"获取到响应内容，长度: {len(content)}")
-            
-            # 直接使用正则表达式提取所有公司数据
-            # 匹配所有 ['10001055', '国海证券股份有限公司', ...] 格式的数据
-            # 注意：使用更简单的模式，匹配整个数组元素
-            import re
-            # 匹配整个公司数据数组元素，包括所有单引号包裹的字段
-            company_pattern = re.compile(r"\['([^']+(?:'[^']*')*[^']+[^']*)\]")
-            matches = company_pattern.findall(content)
-            
-            company_list = []
-            if matches:
-                self.logger.info(f"使用正则表达式提取到 {len(matches)} 条原始记录")
-                
-                # 处理每个匹配到的公司数据
-                for match in matches:
-                    try:
-                        # 将匹配结果转换为Python列表
-                        # 格式：'10001055','国海证券股份有限公司','1993-06-28','','度万中','GHZQ','','44.75','★★★★','国海证券','','2025/9/30 0:00:00'
-                        # 添加括号并使用ast.literal_eval()解析
-                        company_str = f"['{match}']"
-                        company_data = eval(company_str)  # 使用eval直接解析
-                        
-                        # 提取需要的字段
-                        if len(company_data) >= 10:
-                            company_list.append({
-                                "company_code": company_data[0],
-                                "company_name": company_data[1],
-                                "established_date": company_data[2],
-                                "fund_count": company_data[3],
-                                "manager": company_data[4],
-                                "pinyin": company_data[5],
-                                "asset_scale": company_data[7],
-                                "rating": company_data[8],
-                                "short_name": company_data[9]
-                            })
-                    except Exception as e:
-                        self.logger.error(f"处理公司数据失败: {str(e)}")
-                        self.logger.info(f"原始记录: {match}")
-            else:
-                self.logger.error("未匹配到任何公司数据")
+
+            # 响应示例：var json={datas:[[...],[...], ...]}
+            # 解析策略：先提取 datas:[ ... ] 的数组文本，再用 ast.literal_eval 解析为 Python list。
+            import ast
+
+            datas_match = re.search(r"datas\s*:\s*(\[\[.*?\]\])\s*[,}]", content, re.DOTALL)
+            if not datas_match:
+                # 兜底：有些页面可能是 var json={datas:[ ... ]}
+                datas_match = re.search(r"datas\s*:\s*(\[.*?\])\s*[,}]", content, re.DOTALL)
+
+            if not datas_match:
+                self.logger.error("未匹配到 datas 数组")
                 self.logger.info(f"响应内容前1000字符: {content[:1000]}")
                 return []
+
+            datas_str = datas_match.group(1)
+
+            try:
+                datas = ast.literal_eval(datas_str)
+            except Exception as e:
+                self.logger.error(f"解析 datas 数组失败: {str(e)}")
+                self.logger.info(f"datas 原始片段前500字符: {datas_str[:500]}")
+                return []
+
+            company_list: List[Dict[str, Any]] = []
+            for row in datas:
+                if not isinstance(row, list) or len(row) < 10:
+                    continue
+
+                # row 格式：
+                # [公司代码, 公司全称, 成立日期, 基金数量, 法人/经理?, 拼音, '', 规模, 评级, 简称, '', 日期]
+                company_list.append(
+                    {
+                        "company_code": row[0],
+                        "company_name": row[1],
+                        "established_date": row[2],
+                        "fund_count": row[3],
+                        "manager": row[4],
+                        "pinyin": row[5],
+                        "asset_scale": row[7],
+                        "rating": row[8],
+                        "short_name": row[9],
+                    }
+                )
 
             self.logger.info(f"获取基金公司列表成功，共 {len(company_list)} 个公司")
             return company_list
@@ -366,6 +425,7 @@ class EastMoneyScraper(BaseScraper):
         except Exception as e:
             self.logger.error(f"获取基金公司列表失败，解析错误: {str(e)}")
             import traceback
+
             traceback.print_exc()
 
         return []
