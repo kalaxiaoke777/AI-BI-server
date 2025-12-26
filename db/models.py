@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, Boolean, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, Boolean, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db import Base
@@ -202,3 +202,92 @@ class ScrapeTaskItem(Base):
     
     # Relationships
     task = relationship("ScrapeTask", back_populates="task_items")
+
+
+# User management related tables
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"  # Super administrator
+    USER = "user"  # Regular user
+
+class User(Base):
+    __tablename__ = "user"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String(50), unique=True, index=True, nullable=False, comment="username")
+    email = Column(String(100), unique=True, index=True, nullable=False, comment="email")
+    password_hash = Column(String(255), nullable=False, comment="password_hash")
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False, comment="user_role")
+    is_active = Column(Boolean, default=True, comment="is_active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    favorite_funds = relationship("UserFavoriteFund", back_populates="user")
+    holdings = relationship("UserFundHolding", back_populates="user")
+    transactions = relationship("FundTransaction", back_populates="user")
+
+class UserFavoriteFund(Base):
+    __tablename__ = "user_favorite_fund"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True, comment="user_id")
+    fund_id = Column(Integer, ForeignKey("fund_basic.id"), nullable=False, comment="fund_id")
+    fund_code = Column(String(20), index=True, nullable=False, comment="fund_code")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    
+    # Relationships
+    user = relationship("User", back_populates="favorite_funds")
+    fund = relationship("FundBasic")
+    
+    # Unique constraint
+    __table_args__ = (
+        UniqueConstraint('user_id', 'fund_id', name='_user_fund_uc'),
+    )
+
+class UserFundHolding(Base):
+    __tablename__ = "user_fund_holding"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True, comment="user_id")
+    fund_id = Column(Integer, ForeignKey("fund_basic.id"), nullable=False, index=True, comment="fund_id")
+    fund_code = Column(String(20), index=True, nullable=False, comment="fund_code")
+    fund_name = Column(String(100), nullable=False, comment="fund_name")
+    shares = Column(Float, nullable=False, default=0, comment="持有份额")
+    purchase_price = Column(Float, nullable=False, comment="平均购买价格")
+    current_price = Column(Float, default=0, comment="当前净值")
+    total_cost = Column(Float, nullable=False, default=0, comment="总成本")
+    current_value = Column(Float, default=0, comment="当前价值")
+    daily_profit = Column(Float, default=0, comment="日收益")
+    holding_profit = Column(Float, default=0, comment="持有收益")
+    holding_profit_rate = Column(Float, default=0, comment="持有收益率%")
+    is_holding = Column(Boolean, default=True, comment="是否持有")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    user = relationship("User", back_populates="holdings")
+    fund = relationship("FundBasic")
+
+class TransactionType(str, enum.Enum):
+    PURCHASE = "purchase"  # 申购
+    REDEEM = "redeem"  # 赎回
+
+class FundTransaction(Base):
+    __tablename__ = "fund_transaction"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True, comment="user_id")
+    fund_id = Column(Integer, ForeignKey("fund_basic.id"), nullable=False, index=True, comment="fund_id")
+    fund_code = Column(String(20), index=True, nullable=False, comment="fund_code")
+    fund_name = Column(String(100), nullable=False, comment="fund_name")
+    transaction_type = Column(Enum(TransactionType), nullable=False, index=True, comment="transaction_type")
+    shares = Column(Float, nullable=False, comment="交易份额")
+    transaction_price = Column(Float, nullable=False, comment="交易价格")
+    transaction_amount = Column(Float, nullable=False, comment="交易金额")
+    transaction_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True, comment="transaction_time")
+    status = Column(String(20), default="completed", nullable=False, comment="交易状态")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    
+    # Relationships
+    user = relationship("User", back_populates="transactions")
+    fund = relationship("FundBasic")
