@@ -470,3 +470,40 @@ async def get_company_funds(
     except Exception as e:
         logger.error(f"获取基金公司发行的基金列表失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取基金公司发行的基金列表失败: {str(e)}")
+
+@router.post("/sync-company-relation")
+async def sync_fund_company_relation(
+    source: str = Query(..., description="数据源，如eastmoney"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """同步基金和基金公司的关联关系
+    
+    该接口用于同步基金和基金公司的关联关系，包括以下步骤：
+    1. 导入或更新基金公司数据
+    2. 获取基金与公司的关联关系
+    3. 更新基金的company_id和company_name字段
+    """
+    logger.info(f"同步基金和基金公司关联关系请求，数据源: {source}")
+    
+    try:
+        # 转换数据源为枚举
+        source_enum = DataSource(source)
+        
+        # 创建采集服务
+        scrape_service = ScrapeService(db)
+        
+        # 同步基金和基金公司关联关系
+        result = scrape_service.sync_fund_company_relation(source_enum)
+        
+        return {
+            "status": "success",
+            "message": "基金和基金公司关联关系同步完成",
+            "data": result
+        }
+    
+    except ValueError as e:
+        logger.error(f"参数错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"同步基金和基金公司关联关系失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"同步基金和基金公司关联关系失败: {str(e)}")

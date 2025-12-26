@@ -429,6 +429,204 @@ class EastMoneyScraper(BaseScraper):
             traceback.print_exc()
 
         return []
+        
+    def get_fund_detail(self, fund_code: str) -> Dict[str, Any]:
+        """获取基金详细信息，包括所属公司
+        
+        Args:
+            fund_code: 基金代码
+            
+        Returns:
+            Dict[str, Any]: 基金详细信息
+        """
+        self.logger.info(f"开始获取基金详细信息，基金代码: {fund_code}")
+        
+        try:
+            # 构建基金详情页URL
+            detail_url = f"{self.base_url}/{fund_code}.html"
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+                "Referer": self.base_url,
+            }
+            
+            self._wait_for_request()
+            response = requests.get(detail_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            content = response.text
+            
+            # 解析基金详细信息
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(content, "html.parser")
+            
+            # 获取基金名称
+            fund_name = ""
+            name_elem = soup.find("div", class_="fundDetail-tit")
+            if name_elem:
+                fund_name = name_elem.get_text(strip=True)
+            
+            # 获取基金公司信息
+            company_name = ""
+            company_elem = soup.find("a", class_="jjgsName")
+            if company_elem:
+                company_name = company_elem.get_text(strip=True)
+            
+            # 从页面中提取基金类型等信息
+            info_items = soup.find_all("dl", class_="fundInfoItem")
+            fund_type = ""
+            manager = ""
+            launch_date = ""
+            
+            for item in info_items:
+                dt = item.find("dt")
+                dd = item.find("dd")
+                if dt and dd:
+                    dt_text = dt.get_text(strip=True)
+                    dd_text = dd.get_text(strip=True)
+                    
+                    if "基金类型" in dt_text:
+                        fund_type = dd_text
+                    elif "基金经理" in dt_text:
+                        manager = dd_text
+                    elif "成立日期" in dt_text:
+                        launch_date = dd_text
+            
+            return {
+                "fund_code": fund_code,
+                "fund_name": fund_name,
+                "company_name": company_name,
+                "fund_type": fund_type,
+                "manager": manager,
+                "launch_date": launch_date
+            }
+            
+        except requests.RequestException as e:
+            self.logger.error(f"获取基金详细信息失败，网络请求错误: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"获取基金详细信息失败，解析错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return {}
+        
+    def get_funds_by_company_id(self, company_id: str, company_name: str) -> List[Dict[str, Any]]:
+        """根据公司ID获取该公司旗下的基金列表
+        
+        Args:
+            company_id: 公司ID (gsid)
+            company_name: 公司名称
+            
+        Returns:
+            List[Dict[str, Any]]: 基金列表
+        """
+        self.logger.info(f"开始获取公司旗下基金列表，公司ID: {company_id}, 公司名称: {company_name}")
+        
+        try:
+            # 构建请求URL
+            url = f"https://fund.eastmoney.com/Company/home/KFSFundNet?gsid={company_id}&fundType="
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+                "Referer": self.base_url,
+            }
+            
+            self._wait_for_request()
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # 查找基金表格
+            tables = soup.find_all("table")
+            fund_list = []
+            
+            for table in tables:
+                rows = table.find_all("tr")
+                if len(rows) < 2:
+                    continue
+                
+                # 检查是否是基金列表表格
+                if "基金名称" not in rows[0].text or "代码" not in rows[0].text:
+                    continue
+                
+                # 遍历所有基金行（跳过表头）
+                for row in rows[1:]:
+                    cells = row.find_all("td")
+                    if len(cells) < 10:
+                        continue
+                    
+                    # 解析基金名称和代码
+                    name_code_cell = cells[0].text.strip()
+                    if "\n" in name_code_cell:
+                        fund_name, fund_code = name_code_cell.split("\n")
+                        fund_name = fund_name.strip()
+                        fund_code = fund_code.strip()
+                    else:
+                        continue
+                    
+                    # 解析基金类型
+                    fund_type = cells[2].text.strip() if len(cells) > 2 else ""
+                    
+                    # 解析基金经理
+                    manager = cells[10].text.strip() if len(cells) > 10 else ""
+                    
+                    fund_list.append({
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "company_name": company_name,
+                        "fund_type": fund_type,
+                        "manager": manager
+                    })
+                
+                break  # 只处理第一个基金表格
+            
+            self.logger.info(f"获取公司旗下基金列表成功，公司ID: {company_id}，公司名称: {company_name}，基金数量: {len(fund_list)}")
+            return fund_list
+            
+        except requests.RequestException as e:
+            self.logger.error(f"获取公司旗下基金列表失败，公司ID: {company_id}，错误: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"获取公司旗下基金列表失败，公司ID: {company_id}，解析错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return []
+    
+    def get_fund_company_relation(self, fund_codes: List[str] = None) -> List[Dict[str, Any]]:
+        """批量获取基金与公司的关联关系
+        
+        Args:
+            fund_codes: 基金代码列表（可选，如不提供则获取所有基金）
+            
+        Returns:
+            List[Dict[str, Any]]: 基金与公司的关联关系列表
+        """
+        self.logger.info(f"开始批量获取基金与公司的关联关系")
+        
+        result = []
+        
+        # 获取所有基金公司列表
+        company_list = self.get_fund_company_list()
+        if not company_list:
+            self.logger.error("获取基金公司列表失败")
+            return result
+        
+        # 遍历每个公司，获取其旗下的基金列表
+        for company in company_list:
+            company_id = company["company_code"]
+            company_name = company["company_name"]
+            
+            # 使用新的API端点获取该公司旗下的基金列表
+            funds = self.get_funds_by_company_id(company_id, company_name)
+            result.extend(funds)
+        
+        # 如果指定了fund_codes，则过滤结果
+        if fund_codes:
+            fund_codes_set = set(fund_codes)
+            result = [fund for fund in result if fund["fund_code"] in fund_codes_set]
+        
+        self.logger.info(f"批量获取基金与公司的关联关系完成，成功获取 {len(result)} 条数据")
+        return result
 
     def get_all_fund_codes(self) -> List[str]:
         """获取所有基金代码列表

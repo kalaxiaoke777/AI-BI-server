@@ -135,7 +135,133 @@ class ScrapeService:
             "status": "success",
             "total_count": total_count,
             "success_count": success_count,
-            "failed_count": failed_count
+            "failed_count": failed_count,
+        }
+    
+    def sync_fund_company_relation(self, source: DataSource) -> Dict[str, Any]:
+        """同步基金和基金公司的关联关系
+        
+        Args:
+            source: 数据来源
+            
+        Returns:
+            Dict[str, Any]: 同步结果，包括成功数量、失败数量和总数量
+        """
+        self.logger.info(f"开始同步基金和基金公司的关联关系，数据源: {source}")
+        
+        scraper = self.scrapers.get(source)
+        if not scraper:
+            self.logger.error(f"未找到对应的爬虫，数据源: {source}")
+            return {"status": "error", "message": "未找到对应的爬虫"}
+        
+        # 1. 确保基金公司数据已经导入
+        self.logger.info("开始导入基金公司数据")
+        company_list = scraper.get_fund_company_list()
+        
+        if not company_list:
+            self.logger.error("获取基金公司列表失败")
+            return {"status": "error", "message": "获取基金公司列表失败"}
+        
+        # 导入基金公司数据
+        company_success = 0
+        for company_data in company_list:
+            try:
+                # 检查公司是否已存在
+                existing_company = self.db.query(models.FundCompany).filter(
+                    models.FundCompany.company_code == company_data["company_code"]
+                ).first()
+                
+                if existing_company:
+                    # 更新现有公司信息
+                    existing_company.company_name = company_data["company_name"]
+                    existing_company.short_name = company_data["short_name"]
+                    if "established_date" in company_data and company_data["established_date"]:
+                        existing_company.establish_date = company_data["established_date"]
+                else:
+                    # 创建新公司
+                    new_company = models.FundCompany(
+                        company_code=company_data["company_code"],
+                        company_name=company_data["company_name"],
+                        short_name=company_data["short_name"],
+                        establish_date=company_data.get("established_date"),
+                        registered_capital=float(company_data.get("asset_scale", 0)) if company_data.get("asset_scale") else None,
+                        manager=company_data.get("manager"),
+                        pinyin=company_data.get("pinyin"),
+                    )
+                    self.db.add(new_company)
+                    self.db.commit()
+                    self.db.refresh(new_company)
+                
+                company_success += 1
+            except Exception as e:
+                self.logger.error(f"处理基金公司数据失败，公司代码: {company_data['company_code']}, 错误: {str(e)}")
+                self.db.rollback()
+                continue
+        
+        self.logger.info(f"基金公司数据导入完成，成功: {company_success}, 总数量: {len(company_list)}")
+        
+        # 2. 获取所有基金代码
+        fund_codes = [fund.fund_code for fund in self.db.query(models.FundBasic).all()]
+        
+        if not fund_codes:
+            self.logger.error("没有找到基金数据")
+            return {"status": "error", "message": "没有找到基金数据"}
+        
+        self.logger.info(f"开始获取基金与公司的关联关系，基金数量: {len(fund_codes)}")
+        
+        # 3. 批量获取基金与公司的关联关系
+        fund_relations = scraper.get_fund_company_relation()  # 获取所有基金的关联关系
+        
+        if not fund_relations:
+            self.logger.error("获取基金与公司的关联关系失败")
+            return {"status": "error", "message": "获取基金与公司的关联关系失败"}
+        
+        # 4. 同步关联关系
+        relation_success = 0
+        for relation in fund_relations:
+            try:
+                fund_code = relation["fund_code"]
+                company_name = relation["company_name"]
+                
+                # 查找基金
+                fund = self.db.query(models.FundBasic).filter(
+                    models.FundBasic.fund_code == fund_code
+                ).first()
+                
+                if not fund:
+                    self.logger.error(f"基金不存在，基金代码: {fund_code}")
+                    continue
+                
+                # 查找公司
+                company = self.db.query(models.FundCompany).filter(
+                    models.FundCompany.company_name == company_name
+                ).first()
+                
+                if not company:
+                    self.logger.error(f"公司不存在，公司名称: {company_name}")
+                    continue
+                
+                # 更新基金的公司关联
+                if fund.company_id != company.id:
+                    fund.company_id = company.id
+                    fund.company_name = company.company_name
+                    self.db.commit()
+                    relation_success += 1
+                    self.logger.info(f"更新基金关联成功，基金代码: {fund_code}, 公司名称: {company_name}")
+                else:
+                    self.logger.debug(f"基金关联已存在，基金代码: {fund_code}, 公司名称: {company_name}")
+                    relation_success += 1
+            except Exception as e:
+                self.logger.error(f"处理基金关联关系失败，基金代码: {relation.get('fund_code', '未知')}, 错误: {str(e)}")
+                self.db.rollback()
+                continue
+        
+        self.logger.info(f"基金与公司关联关系同步完成，成功: {relation_success}, 总数量: {len(fund_relations)}")
+        
+        return {
+            "status": "success",
+            "company_sync": {"success": company_success, "total": len(company_list)},
+            "relation_sync": {"success": relation_success, "total": len(fund_relations)}
         }
     
     def update_fund_rank(self, source: DataSource, max_pages: int = None) -> Dict[str, Any]:
