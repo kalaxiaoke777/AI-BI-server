@@ -1,60 +1,79 @@
 {
-    // 使用 IntelliSense 了解相关属性。 
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "FastAPI: Uvicorn（调试，无 reload）",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "app.main:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8000"
-            ],
-            "jinja": true,
-            "justMyCode": true,
-            "console": "integratedTerminal"
-        },
-        {
-            // 说明：--reload 会启子进程，launch 模式下断点可能不稳定。
-            // 若你必须使用 --reload，建议用下面的“Attach（配合 debugpy）”方式。
-            "name": "FastAPI: Uvicorn（launch + reload，断点可能不稳定）",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "app.main:app",
-                "--reload",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8000"
-            ],
-            "jinja": true,
-            "justMyCode": true,
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "FastAPI: Attach（debugpy 5678）",
-            "type": "debugpy",
-            "request": "attach",
-            "connect": {
-                "host": "127.0.0.1",
-                "port": 5678
-            },
-            "justMyCode": true
-        },
-        {
-            "name": "Python 调试程序: 当前文件",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal"
-        }
-    ]
+  // 使用 IntelliSense 了解相关属性。
+  // 悬停以查看现有属性的描述。
+  // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FastAPI: Uvicorn（调试，无 reload）",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "F:/minicoda/python.exe",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "jinja": true,
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      // 说明：--reload 会启子进程，launch 模式下断点可能不稳定。
+      // 若你必须使用 --reload，建议用下面的“Attach（配合 debugpy）”方式。
+      "name": "FastAPI: Uvicorn（launch + reload，断点可能不稳定）",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "F:/minicoda/python.exe",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--reload",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "jinja": true,
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      // 新增：用 debugpy 启动 uvicorn + reload（推荐，断点更稳）
+      "name": "FastAPI: debugpy + Uvicorn（reload，推荐）",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "F:/minicoda/python.exe",
+      "module": "debugpy",
+      "args": [
+        "--listen",
+        "127.0.0.1:5678",
+        "--wait-for-client",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--reload",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "FastAPI: Attach（debugpy 5678）",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "127.0.0.1",
+        "port": 5678
+      },
+      "justMyCode": true
+    },
+    {
+      "name": "Python 调试程序: 当前文件",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    }
+  ]
 }

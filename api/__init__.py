@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from api import fund, health, scrape
+from api import fund, health, scrape, query
 
 # 创建主路由
 router = APIRouter()
@@ -8,3 +8,4 @@ router = APIRouter()
 router.include_router(health.router, prefix="/health", tags=["健康检查"])
 router.include_router(fund.router, prefix="/fund", tags=["基金数据"])
 router.include_router(scrape.router, prefix="/scrape", tags=["数据采集"])
+router.include_router(query.router, prefix="/query", tags=["查询接口"])
