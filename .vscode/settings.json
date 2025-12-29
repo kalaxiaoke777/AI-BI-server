@@ -3,7 +3,4 @@
   // 建议移除，改用 Python 扩展原生设置锁定解释器。
 
   "python.defaultInterpreterPath": "F:/minicoda/python.exe"
-  // "python-envs.defaultEnvManager": "ms-python.python:conda",
-  // "python-envs.defaultPackageManager": "ms-python.python:conda",
-  // "python-envs.pythonProjects": []
 }

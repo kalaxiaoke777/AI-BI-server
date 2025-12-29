@@ -291,3 +291,42 @@ class FundTransaction(Base):
     # Relationships
     user = relationship("User", back_populates="transactions")
     fund = relationship("FundBasic")
+
+
+# Index related tables
+class IndexInfo(Base):
+    __tablename__ = "index_info"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    index_name = Column(String(50), unique=True, index=True, nullable=False, comment="指数名称")
+    index_code = Column(String(20), unique=True, index=True, nullable=False, comment="指数代码")
+    secid = Column(String(20), unique=True, index=True, nullable=False, comment="东方财富secid")
+    market = Column(String(20), comment="市场")
+    description = Column(Text, comment="指数描述")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), comment="updated_at")
+    
+    # Relationships
+    history_data = relationship("IndexHistory", back_populates="index")
+
+class IndexHistory(Base):
+    __tablename__ = "index_history"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    index_id = Column(Integer, ForeignKey("index_info.id"), nullable=False, index=True, comment="index_id")
+    trade_date = Column(DateTime, nullable=False, index=True, comment="trade_date")
+    open = Column(Float, comment="开盘价")
+    close = Column(Float, nullable=False, comment="收盘价")
+    high = Column(Float, comment="最高价")
+    low = Column(Float, comment="最低价")
+    volume = Column(Integer, comment="成交量")
+    amount = Column(Float, comment="成交额")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="created_at")
+    
+    # Relationships
+    index = relationship("IndexInfo", back_populates="history_data")
+    
+    # Unique constraint
+    __table_args__ = (
+        UniqueConstraint('index_id', 'trade_date', name='_index_trade_date_uc'),
+    )
