@@ -139,11 +139,11 @@ async def login_for_access_token(login_data: UserLogin, db: Session = Depends(ge
     # 查找用户
     user = db.query(User).filter(User.username == login_data.username).first()
     if not user:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise HTTPException(status_code=400, detail="用户名或密码错误")
 
     # 验证密码
     if not verify_password(login_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise HTTPException(status_code=400, detail="用户名或密码错误")
 
     # 检查用户是否激活
     if not user.is_active:

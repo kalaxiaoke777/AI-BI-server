@@ -21,7 +21,7 @@
       "name": "FastAPI: Uvicorn（launch + reload，断点可能不稳定）",
       "type": "debugpy",
       "request": "launch",
-      "python": "F:/minicoda/python.exe",
+      // "python": "F:/minicoda/python.exe",
       "module": "uvicorn",
       "args": [
         "app.main:app",
