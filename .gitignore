@@ -1,3 +1,10 @@
-__pycache__
+# 缓存文件
 *.pyc
 *.pyo
+*.cpython-312.pyc
+
+# 所有的__pycache__目录
+__pycache__/
+
+# 虚拟环境目录
+venv/
