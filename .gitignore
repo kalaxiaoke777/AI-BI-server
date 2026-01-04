@@ -2,9 +2,12 @@
 *.pyc
 *.pyo
 *.cpython-312.pyc
+*.pyo
+*.log
 
 # 所有的__pycache__目录
 __pycache__/
 
 # 虚拟环境目录
 venv/
+.vscode/

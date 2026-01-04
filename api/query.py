@@ -158,7 +158,7 @@ async def get_fund_basic(
     is_purchaseable: Optional[bool] = Query(None, description="是否可购买"),
     # 排序参数
     sort_by: Optional[str] = Query(
-        None, description="排序字段，如 latest_nav, created_at"
+        None, description="排序字段，如 latest_nav, daily_growth, created_at"
     ),
     sort_order: str = Query("asc", description="排序方式，asc 或 desc"),
     db: Session = Depends(get_db),
@@ -185,17 +185,19 @@ async def get_fund_basic(
 
         # 应用排序
         if sort_by:
+            order_func = None
+            # 检查排序字段来自哪个表
             if hasattr(FundBasic, sort_by):
-                order_func = (
-                    desc(getattr(FundBasic, sort_by))
-                    if sort_order == "desc"
-                    else asc(getattr(FundBasic, sort_by))
-                )
+                # 来自FundBasic表的字段
+                order_func = getattr(FundBasic, sort_by)
+            if order_func:
+                # 根据排序方式应用asc或desc
+                if sort_order.lower() == "desc":
+                    order_func = desc(order_func)
                 query = query.order_by(order_func)
             else:
-                raise HTTPException(
-                    status_code=400, detail=f"排序字段 {sort_by} 不存在"
-                )
+                # 排序字段不存在，返回默认排序
+                query = query.order_by(desc(FundBasic.created_at))
         else:
             # 默认按创建时间排序
             query = query.order_by(desc(FundBasic.created_at))
@@ -236,6 +238,7 @@ async def get_fund_basic(
                     "purchase_fee": fund.purchase_fee,
                     "redemption_fee": fund.redemption_fee,
                     "purchase_fee_rate": fund.purchase_fee_rate,
+                    "daily_growth": fund.daily_growth,
                     "created_at": fund.created_at,
                     "updated_at": fund.updated_at,
                 }
