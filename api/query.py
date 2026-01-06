@@ -543,6 +543,7 @@ async def get_combined_fund_data(
     # 分页参数
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+    fund_id: Optional[str] = Query(None, description="编号"),
     # 过滤参数
     fund_name: Optional[str] = Query(None, description="基金名称，支持模糊查询"),
     company_name: Optional[str] = Query(None, description="基金公司名称，支持模糊查询"),
@@ -569,6 +570,8 @@ async def get_combined_fund_data(
 
         # 应用过滤条件
         filters = []
+        if fund_id:
+            filters.append(FundBasic.id == fund_id)
         if fund_name:
             filters.append(FundBasic.fund_name.ilike(f"%{fund_name}%"))
         if company_name:
@@ -654,6 +657,8 @@ async def get_combined_fund_data(
                         "yearly_growth": rank.yearly_growth,
                         "two_year_growth": rank.two_year_growth,
                         "three_year_growth": rank.three_year_growth,
+                        "five_year_growth": rank.five_year_growth,
+                        "since_launch_growth": rank.since_launch_growth,
                         "ytd_growth": rank.ytd_growth,
                     },
                     "company": {
