@@ -213,7 +213,8 @@ async def get_all_users(
 ):
     """获取所有用户列表（仅管理员可访问）"""
     users = db.query(User).offset(skip).limit(limit).all()
-    return [UserResponse.from_orm(user) for user in users]
+    active_users = filter(lambda u: u.is_active, users)
+    return [UserResponse.from_orm(user) for user in active_users]
 
 
 @router.get("/users/{user_id}", response_model=UserResponse, tags=["用户管理"])
@@ -297,7 +298,7 @@ async def delete_user(
     # 检查是否试图删除自己
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="不能删除自己的账号")
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")

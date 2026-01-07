@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc, or_, and_
+from sqlalchemy import desc, asc, or_, and_, nullslast
 from typing import List, Optional
 from loguru import logger
 
@@ -543,7 +543,7 @@ async def get_combined_fund_data(
     # 分页参数
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数"),
-    fund_id: Optional[str] = Query(None, description="编号"),
+    fund_id: Optional[int] = Query(None, description="编号"),
     # 过滤参数
     fund_name: Optional[str] = Query(None, description="基金名称，支持模糊查询"),
     company_name: Optional[str] = Query(None, description="基金公司名称，支持模糊查询"),
@@ -560,17 +560,14 @@ async def get_combined_fund_data(
     组合查询基金数据，包含基本信息、排行数据和公司信息
     """
     try:
-        # 复杂查询：join基金基本信息、排行数据和公司信息
-        # 使用fund_rank表替代fund_growth表，因为rank表中已经包含了增长率数据
         query = (
             db.query(FundBasic, FundRank, FundCompany)
-            .join(FundRank, FundBasic.id == FundRank.fund_id)
-            .join(FundCompany, FundBasic.company_id == FundCompany.id)
+            .outerjoin(FundRank, FundBasic.id == FundRank.fund_id)
+            .outerjoin(FundCompany, FundBasic.company_id == FundCompany.id)
         )
 
-        # 应用过滤条件
         filters = []
-        if fund_id:
+        if fund_id is not None:
             filters.append(FundBasic.id == fund_id)
         if fund_name:
             filters.append(FundBasic.fund_name.ilike(f"%{fund_name}%"))
@@ -588,45 +585,32 @@ async def get_combined_fund_data(
         if filters:
             query = query.filter(and_(*filters))
 
-        # 应用排序
+        # 排序：对可能为 NULL 的列用 nullslast
         if sort_by:
             if hasattr(FundBasic, sort_by):
-                order_func = (
-                    desc(getattr(FundBasic, sort_by))
-                    if sort_order == "desc"
-                    else asc(getattr(FundBasic, sort_by))
-                )
-                query = query.order_by(order_func)
+                col = getattr(FundBasic, sort_by)
+                order_expr = desc(col) if sort_order == "desc" else asc(col)
+                query = query.order_by(order_expr)
             elif hasattr(FundRank, sort_by):
-                order_func = (
-                    desc(getattr(FundRank, sort_by))
-                    if sort_order == "desc"
-                    else asc(getattr(FundRank, sort_by))
-                )
-                query = query.order_by(order_func)
+                col = getattr(FundRank, sort_by)
+                order_expr = desc(col) if sort_order == "desc" else asc(col)
+                query = query.order_by(nullslast(order_expr))
             elif hasattr(FundCompany, sort_by):
-                order_func = (
-                    desc(getattr(FundCompany, sort_by))
-                    if sort_order == "desc"
-                    else asc(getattr(FundCompany, sort_by))
-                )
-                query = query.order_by(order_func)
+                col = getattr(FundCompany, sort_by)
+                order_expr = desc(col) if sort_order == "desc" else asc(col)
+                query = query.order_by(nullslast(order_expr))
             else:
                 raise HTTPException(
                     status_code=400, detail=f"排序字段 {sort_by} 不存在"
                 )
         else:
-            # 默认按近1年涨幅降序排序
-            query = query.order_by(desc(FundRank.yearly_growth))
+            query = query.order_by(nullslast(desc(FundRank.yearly_growth)))
 
-        # 计算总数
         total = query.count()
 
-        # 应用分页
         offset = (page - 1) * page_size
         combined_data = query.offset(offset).limit(page_size).all()
 
-        # 构建响应
         result = {
             "total": total,
             "page": page,
@@ -645,29 +629,37 @@ async def get_combined_fund_data(
                         "risk_level": fund.risk_level,
                         "is_purchaseable": fund.is_purchaseable,
                     },
-                    "rank": {
-                        "rank": rank.rank,
-                        "rank_date": rank.rank_date,
-                        "nav": rank.nav,
-                        "accum_nav": rank.accum_nav,
-                        "daily_growth": rank.daily_growth,
-                        "weekly_growth": rank.weekly_growth,
-                        "monthly_growth": rank.monthly_growth,
-                        "quarterly_growth": rank.quarterly_growth,
-                        "yearly_growth": rank.yearly_growth,
-                        "two_year_growth": rank.two_year_growth,
-                        "three_year_growth": rank.three_year_growth,
-                        "five_year_growth": rank.five_year_growth,
-                        "since_launch_growth": rank.since_launch_growth,
-                        "ytd_growth": rank.ytd_growth,
-                    },
-                    "company": {
-                        "id": company.id,
-                        "company_code": company.company_code,
-                        "company_name": company.company_name,
-                        "short_name": company.short_name,
-                        "establish_date": company.establish_date,
-                    },
+                    "rank": (
+                        None
+                        if rank is None
+                        else {
+                            "rank": rank.rank,
+                            "rank_date": rank.rank_date,
+                            "nav": rank.nav,
+                            "accum_nav": rank.accum_nav,
+                            "daily_growth": rank.daily_growth,
+                            "weekly_growth": rank.weekly_growth,
+                            "monthly_growth": rank.monthly_growth,
+                            "quarterly_growth": rank.quarterly_growth,
+                            "yearly_growth": rank.yearly_growth,
+                            "two_year_growth": rank.two_year_growth,
+                            "three_year_growth": rank.three_year_growth,
+                            "five_year_growth": rank.five_year_growth,
+                            "since_launch_growth": rank.since_launch_growth,
+                            "ytd_growth": rank.ytd_growth,
+                        }
+                    ),
+                    "company": (
+                        None
+                        if company is None
+                        else {
+                            "id": company.id,
+                            "company_code": company.company_code,
+                            "company_name": company.company_name,
+                            "short_name": company.short_name,
+                            "establish_date": company.establish_date,
+                        }
+                    ),
                 }
                 for fund, rank, company in combined_data
             ],
