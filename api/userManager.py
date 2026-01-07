@@ -20,7 +20,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT配置
 SECRET_KEY = "your-secret-key"  # 实际应用中应从配置文件获取
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
 
 # 模型定义

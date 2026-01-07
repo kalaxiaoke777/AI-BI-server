@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from api import fund, health, scrape, query, userManager, SsFundManager, index
+from api import fund, health, scrape, query, userManager, SsFundManager, index, AI
 
 # 创建主路由
 router = APIRouter()
@@ -12,3 +12,4 @@ router.include_router(query.router, prefix="/query", tags=["查询接口"])
 router.include_router(userManager.router, prefix="/user", tags=["用户管理"])
 router.include_router(SsFundManager.router, prefix="/ss-fund", tags=["自选基金"])
 router.include_router(index.router, prefix="/index", tags=["指数数据"])
+router.include_router(AI.router, prefix="/ai", tags=["智能助手"])
