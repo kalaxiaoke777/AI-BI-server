@@ -467,6 +467,51 @@ class FundTransaction(Base):
     fund = relationship("FundBasic")
 
 
+# Pending transactions table (for T-day pending orders confirmed on effective_date)
+class PendingFundTransaction(Base):
+    __tablename__ = "pending_fund_transaction"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(
+        Integer, ForeignKey("user.id"), nullable=False, index=True, comment="user_id"
+    )
+    fund_id = Column(
+        Integer,
+        ForeignKey("fund_basic.id"),
+        nullable=False,
+        index=True,
+        comment="fund_id",
+    )
+    fund_code = Column(String(20), index=True, nullable=False, comment="fund_code")
+    fund_name = Column(String(100), nullable=False, comment="fund_name")
+    transaction_type = Column(
+        Enum(TransactionType), nullable=False, index=True, comment="transaction_type"
+    )
+    # 对于申购：amount 表示申购金额；对于赎回：amount 表示赎回份额
+    amount = Column(Float, nullable=False, comment="申购金额或赎回份额")
+    submit_time = Column(
+        DateTime(timezone=True), server_default=func.now(), comment="submit_time"
+    )
+    # effective_date 存储预计确认净值的交易日（日期）
+    effective_date = Column(DateTime, nullable=False, comment="effective_date")
+    # 用户可以撤销到的截止时间（通常为 effective_date 当天 15:00 之前）
+    can_cancel_until = Column(DateTime, nullable=False, comment="can_cancel_until")
+    status = Column(
+        String(20),
+        default="pending",
+        nullable=False,
+        comment="pending/canceled/confirmed",
+    )
+    note = Column(Text, comment="备注")
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), comment="created_at"
+    )
+
+    # Relationships
+    user = relationship("User")
+    fund = relationship("FundBasic")
+
+
 # Index related tables
 class IndexInfo(Base):
     __tablename__ = "index_info"
