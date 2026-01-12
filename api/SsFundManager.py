@@ -851,9 +851,7 @@ async def purchase_fund(
         }
 
 
-@router.post(
-    "/holdings/redeem", response_model=FundTransactionResponse, tags=["基金持有"]
-)
+@router.post("/holdings/redeem", response_model=Dict[str, Any], tags=["基金持有"])
 async def redeem_fund(
     redeem_data: FundRedeemRequest,
     current_user: User = Depends(get_current_user),
@@ -949,7 +947,7 @@ async def redeem_fund(
         )
 
         return {
-            "transaction": transaction,
+            "transaction": FundTransactionResponse.model_validate(transaction),
             "redeem_info": {
                 "赎回份额": redeem_data.shares,
                 "确认净值": fund.latest_nav,
