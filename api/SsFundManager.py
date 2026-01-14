@@ -1160,6 +1160,7 @@ async def list_pending_transactions(
     pendings = (
         db.query(PendingFundTransaction)
         .filter(PendingFundTransaction.user_id == current_user.id)
+        .filter(PendingFundTransaction.status == "pending")
         .order_by(PendingFundTransaction.created_at.desc())
         .all()
     )
