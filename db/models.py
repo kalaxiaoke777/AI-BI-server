@@ -403,6 +403,7 @@ class UserFundHolding(Base):
     purchase_price = Column(Float, nullable=False, comment="平均购买价格")
     current_price = Column(Float, default=0, comment="当前净值")
     total_cost = Column(Float, nullable=False, default=0, comment="总成本")
+    today_profit_rate = Column(Float, default=0, comment="今日收益率%")
     current_value = Column(Float, default=0, comment="当前价值")
     daily_profit = Column(Float, default=0, comment="日收益")
     holding_profit = Column(Float, default=0, comment="持有收益")

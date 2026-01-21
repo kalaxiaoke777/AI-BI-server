@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: Optional[str] = "https://api.xiaomimimo.com/v1"
     OPENAI_MODEL: str = "mimo-v2-flash"
 
+    GETFUND_API_URL: str = (
+        "https://m.dayfund.cn/ajs/ajaxdata.shtml?showtype=getfundvalue&fundcode="
+    )
+    headers: dict = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://fund.eastmoney.com/",
+    }  # 加headers防反爬
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

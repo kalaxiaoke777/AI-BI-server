@@ -1,3 +1,5 @@
+from datetime import datetime
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, or_, and_, nullslast
@@ -7,6 +9,7 @@ from loguru import logger
 # 导入数据库模型和依赖
 from db import get_db
 from db.models import FundCompany, FundBasic, FundRank, FundGrowth
+from config.config import settings
 
 router = APIRouter()
 
@@ -15,6 +18,41 @@ router = APIRouter()
 async def query():
     """健康检查接口"""
     return {"status": "query", "service": "查询接口", "message": "服务运行正常"}
+
+
+@router.get("/getfundvalue")
+async def get_fund_value(fund_codes: str):
+    """
+    获取指定基金代码的实时估值数据
+    """
+
+    headers = settings.headers
+
+    try:
+        data = []
+        for item in fund_codes.split(","):
+            url = settings.GETFUND_API_URL + item
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()  # 检查请求是否成功
+            source = response.text.split("|")
+            data.append(
+                {
+                    "fund_code": item,
+                    "yes_date": source[0],
+                    "yes_value": source[1],
+                    "yes_subtract": source[3],
+                    "yes_reduct": source[4],
+                    "day_date": source[10],
+                    "day_value": source[7],
+                    "day_subtract": source[6],
+                    "day_reduct": source[5],
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
+        return data
+
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ---------------------- 基金公司查询接口 ----------------------

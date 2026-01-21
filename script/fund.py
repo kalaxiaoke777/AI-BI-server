@@ -1,11 +1,9 @@
 from datetime import datetime
 import requests
-from bs4 import BeautifulSoup
-import time
 
 
 def get_fund_valuation(fund_code):
-    url = f"https://fund.eastmoney.com/{fund_code}.html"
+    url = f"https://m.dayfund.cn/ajs/ajaxdata.shtml?showtype=getfundvalue&fundcode={fund_code}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://fund.eastmoney.com/",
@@ -14,37 +12,26 @@ def get_fund_valuation(fund_code):
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()  # 检查请求是否成功
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # 查找估算净值部分（class="dataItem02"）
-        valuation_div = soup.find("div", class_="dataOfFund")
-        if not valuation_div:
-            return {"error": "未找到估值模块，可能非交易时间或网页结构变"}
-        valuation_div = valuation_div.find("dl", class_="dataItem01")
-
-        # 估算净值 (gsz)
-        gsz_elem = valuation_div.find("dd", class_="dataNums")
-        gsz = gsz_elem.find("span").text.strip() if gsz_elem else "N/A"
-
-        # 估算涨幅 (gszzl) 第二个span
-        gszzl = (
-            gsz_elem.find_all("span")[1].text.strip()
-            if gsz_elem and len(gsz_elem.find_all("span")) > 1
-            else "N/A"
-        )
-
-        return {
+        source = response.text.split("|")
+        data = {
             "fund_code": fund_code,
-            "gsz": gsz,  # 估算净值
-            "gszzl": gszzl,  # 估算涨幅
-            "gztime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # 估值时间
+            "yes_date": source[0],
+            "yes_value": source[1],
+            "yes_subtract": source[3],
+            "yes_reduct": source[4],
+            "day_date": source[10],
+            "day_value": source[7],
+            "day_subtract": source[6],
+            "day_reduct": source[5],
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
+        return data
 
     except Exception as e:
         return {"error": str(e)}
 
 
 # 示例：实时轮询（每60秒一次，按Ctrl+C停止）
-fund_code = "025499"  # 替换成你的基金代码
+fund_code = "020594"  # 替换成你的基金代码
 data = get_fund_valuation(fund_code)
 print(data)
