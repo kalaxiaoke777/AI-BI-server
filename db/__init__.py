@@ -42,7 +42,7 @@ def init_db():
     logger.info("开始更新数据库表结构...")
 
     # 先删除所有表，然后重新创建
-    Base.metadata.drop_all(bind=engine)
+    # Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     logger.info("数据库初始化完成")
