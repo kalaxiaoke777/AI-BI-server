@@ -243,13 +243,18 @@ class PendingFundTransactionResponse(BaseModel):
 
 # 工具函数
 def get_fund_by_id_or_code(
-    db: Session, fund_id: Optional[int] = None, fund_code: Optional[str] = None
+    db: Session,
+    fund_id: Optional[int] = None,
+    fund_code: Optional[str] = None,
+    fund_name: Optional[str] = None,
 ) -> Optional[FundBasic]:
     """根据基金ID或代码获取基金信息"""
     if fund_id:
         return db.query(FundBasic).filter(FundBasic.id == fund_id).first()
     elif fund_code:
         return db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
+    elif fund_name:
+        return db.query(FundBasic).filter(FundBasic.fund_name == fund_name).first()
     return None
 
 
@@ -546,6 +551,86 @@ def process_pending_transactions(
             results["errors"] += 1
 
     return results
+
+
+@router.post("/synchronized")
+async def synchronize_fund_data(
+    data: Dict[str, Any] = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    同步持仓数据到数据库
+    """
+    # 检查是否提供了必要参数
+    fund_name = data.get("fundName")
+    holding_amount = data.get("holdingAmount")
+    holding_profit = data.get("holdingProfit")
+    
+    if not fund_name or not holding_amount or holding_profit is None:
+        raise HTTPException(
+            status_code=400, detail="必须提供基金名称、持有金额和持有收益"
+        )
+
+    # 获取基金信息
+    fund = get_fund_by_id_or_code(db, fund_name=fund_name)
+    if not fund:
+        raise HTTPException(status_code=404, detail="基金不存在")
+
+    # 检查基金是否有最新净值
+    if not fund.latest_nav:
+        raise HTTPException(status_code=400, detail="该基金暂无最新净值数据，无法同步")
+    
+    # 计算相关字段
+    current_value = holding_amount  # 当前持仓金额
+    total_cost = current_value - holding_profit  # 总成本 = 当前价值 - 持有收益
+    shares = total_cost / fund.latest_nav  # 持有份额 = 总成本 / 当前净值
+    purchase_price = fund.latest_nav  # 平均购买价格 = 当前净值（简化计算）
+    holding_profit_rate = (holding_profit / total_cost) * 100 if total_cost > 0 else 0  # 持有收益率
+    
+    # 检查是否已存在该基金的持仓记录
+    existing_holding = db.query(UserFundHolding).filter(
+        UserFundHolding.user_id == current_user.id,
+        UserFundHolding.fund_id == fund.id,
+        UserFundHolding.is_holding == True
+    ).first()
+    
+    if existing_holding:
+        # 更新现有持仓记录
+        existing_holding.shares = shares
+        existing_holding.purchase_price = purchase_price
+        existing_holding.current_price = fund.latest_nav
+        existing_holding.total_cost = total_cost
+        existing_holding.current_value = current_value
+        existing_holding.holding_profit = holding_profit
+        existing_holding.holding_profit_rate = holding_profit_rate
+        
+        db.commit()
+        db.refresh(existing_holding)
+        logger.info(f"更新持仓成功，用户ID: {current_user.id}, 基金名称: {fund_name}")
+        return {"status": "success", "message": "持仓数据更新成功", "data": existing_holding}
+    else:
+        # 创建新的持仓记录
+        new_holding = UserFundHolding(
+            user_id=current_user.id,
+            fund_id=fund.id,
+            fund_code=fund.fund_code,
+            fund_name=fund.fund_name,
+            shares=shares,
+            purchase_price=purchase_price,
+            current_price=fund.latest_nav,
+            total_cost=total_cost,
+            current_value=current_value,
+            holding_profit=holding_profit,
+            holding_profit_rate=holding_profit_rate,
+            is_holding=True
+        )
+        
+        db.add(new_holding)
+        db.commit()
+        db.refresh(new_holding)
+        logger.info(f"同步持仓成功，用户ID: {current_user.id}, 基金名称: {fund_name}")
+        return {"status": "success", "message": "持仓数据同步成功", "data": new_holding}
 
 
 # 路由
